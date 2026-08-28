@@ -1,0 +1,14 @@
+{
+  "name": "SkinAdvisor",
+  "short_name": "SkinAdvisor",
+  "description": "Diagnostic de peau, routine personnalisée et suivi sur huit semaines.",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#E8E0CD",
+  "theme_color": "#E8E0CD",
+  "lang": "fr",
+  "icons": [
+    { "src": "icone-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icone-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}
