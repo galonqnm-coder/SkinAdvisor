@@ -71,12 +71,21 @@ function reponsesPropres(v) {
   return r;
 }
 
+/* Postgres ne conserve pas l'ordre des clés d'un jsonb : comparer deux
+   JSON.stringify donnerait toujours « différent », et l'historique se
+   remplirait à chaque synchronisation. On compare donc clé par clé. */
+function memesScores(a, b) {
+  const A = a && typeof a === "object" ? a : {};
+  const B = b && typeof b === "object" ? b : {};
+  const ka = Object.keys(A).sort(), kb = Object.keys(B).sort();
+  return ka.length === kb.length && ka.every((k, i) => kb[i] === k && Number(A[k]) === Number(B[k]));
+}
+
 async function ajouterDiagnosticSiNouveau(profilId, reponses, scores, profilPeau) {
   const derniers = await sb(
     "diagnostics?profil_id=eq." + profilId + "&select=scores&order=cree_le.desc&limit=1"
   );
-  const avant = derniers && derniers[0] ? JSON.stringify(derniers[0].scores) : null;
-  if (avant === JSON.stringify(scores)) return false;
+  if (derniers && derniers[0] && memesScores(derniers[0].scores, scores)) return false;
   await sb("diagnostics", {
     method: "POST",
     headers: { prefer: "return=minimal" },
