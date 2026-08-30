@@ -264,6 +264,24 @@ async function statistiquesServeur() {
   const typesPeau = compter(derniers.map(d => d.profil_peau));
   const budgets = compter(derniers.map(d => LABEL_BUDGET[(d.reponses || {}).budget] || null));
 
+  // Préoccupations déclarées (jusqu'à 3 par personne, question à choix multiple) :
+  // on aplatit un tableau de tableaux avant de compter, plutôt qu'une valeur par ligne.
+  const LABEL_CONCERNS = {
+    acne: "Boutons, imperfections", pores: "Points noirs, pores dilatés", brillance: "Brillance, excès de sébum",
+    taches: "Taches, marques de boutons", rides: "Rides, perte de fermeté", rougeurs: "Rougeurs, irritations",
+    deshydratation: "Tiraillements, déshydratation", terne: "Teint terne, fatigué", cernes: "Cernes, poches"
+  };
+  const toutesPreoccupations = [];
+  derniers.forEach(d => (((d.reponses || {}).concerns) || []).forEach(c => toutesPreoccupations.push(LABEL_CONCERNS[c] || c)));
+  const preoccupations = compter(toutesPreoccupations);
+
+  // Profil démographique déclaré (âge et sexe), même méthode que types de peau/budgets :
+  // dernier diagnostic de chaque profil, jamais un comptage brut de toutes les lignes.
+  const LABEL_AGE = { "16": "16-24", "25": "25-34", "35": "35-44", "45": "45-54", "55": "55 +" };
+  const LABEL_SEXE = { femme: "Femmes", homme: "Hommes", autre: "Autre" };
+  const ages = compter(derniers.map(d => LABEL_AGE[(d.reponses || {}).age] || null));
+  const sexes = compter(derniers.map(d => LABEL_SEXE[(d.reponses || {}).sexe] || null));
+
   // Profils créés / diagnostics enregistrés par semaine, 8 dernières semaines.
   const semaines = [];
   const debutCourant = debutDeSemaineUTC(Date.now());
@@ -287,6 +305,9 @@ async function statistiquesServeur() {
     diagnosticsParSemaine: parSemaine(listeDiagnostics.map(d => Date.parse(d.cree_le))),
     typesPeau,
     budgets,
+    preoccupations,
+    ages,
+    sexes,
     plafondAtteint: totalProfils >= PLAFOND_LIGNES || listeDiagnostics.length >= PLAFOND_LIGNES
   };
 }
