@@ -10,6 +10,9 @@
  *               est configuré, envoie le lien de reconnexion par e-mail.
  *               La réponse ne révèle jamais si l'adresse est connue.
  *   GET     ?token=…      → profil + dernier diagnostic + suivi + scores précédents
+ *   GET     ?token=…&admin=1  → statistiques serveur agrégées, réservé au
+ *             titulaire de ADMIN_EMAIL (vérifié ici, jamais côté navigateur
+ *             seul) — 403 sinon. Aucune donnée nominative renvoyée.
  *   DELETE  ?token=…      → efface le profil et tout ce qui en dépend
  *
  * Variables d'environnement (Vercel → Settings → Environment Variables) :
@@ -20,6 +23,8 @@
  *   BREVO_EXPEDITEUR             adresse d'expéditeur validée dans Brevo
  *   BREVO_LIST_ID                facultatif (liste contacts)
  *   SITE_URL                     facultatif (défaut : https://skin-advisor-two.vercel.app)
+ *   ADMIN_EMAIL                  facultatif (défaut : nathandebont@gmail.com) — seul ce
+ *                                compte peut ouvrir le tableau de bord serveur
  *
  * La clé service_role contourne la RLS : elle ne doit JAMAIS apparaître
  * dans index.html ni dans aucun fichier envoyé au navigateur.
@@ -35,6 +40,8 @@ const CLE_SERVICE =
   process.env.SUPABASE_SERVICE_KEY ||
   process.env.SUPABASE_SERVICE_ROLE_KEY ||
   process.env.SUPABASE_SECRET_KEY || "";
+
+const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || "nathandebont@gmail.com").trim().toLowerCase();
 
 const EMAIL_OK = /^[^@\s]+@[^@\s]+\.[^@\s]{2,}$/;
 const UUID_OK = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -206,6 +213,84 @@ async function enregistrerSuivi(profilId, suivi) {
   });
 }
 
+/* Tableau de bord serveur (30 août) : statistiques agrégées seulement,
+   jamais de liste nominative. Lecture simple par requêtes REST + agrégation
+   en mémoire — au-delà de PLAFOND_LIGNES, remplacer par une vue Postgres
+   dédiée plutôt que d'agrandir ce plafond. */
+const PLAFOND_LIGNES = 5000;
+
+function debutDeSemaineUTC(ms) {
+  const t = new Date(ms);
+  const jour = (t.getUTCDay() + 6) % 7; // lundi = 0
+  t.setUTCDate(t.getUTCDate() - jour);
+  t.setUTCHours(0, 0, 0, 0);
+  return t.getTime();
+}
+
+async function statistiquesServeur() {
+  const [profils, diagnostics, journeesValidees] = await Promise.all([
+    sb("profils?select=id,cree_le,consentement&order=cree_le.desc&limit=" + PLAFOND_LIGNES),
+    sb("diagnostics?select=profil_id,profil_peau,reponses,cree_le&order=cree_le.desc&limit=" + PLAFOND_LIGNES),
+    sb("suivi_etapes?fait=eq.true&select=profil_id&limit=" + PLAFOND_LIGNES)
+  ]);
+
+  const listeProfils = profils || [];
+  const listeDiagnostics = diagnostics || [];
+  const profilsEngages = new Set((journeesValidees || []).map(s => s.profil_id));
+
+  const totalProfils = listeProfils.length;
+  const suiviActifs = listeProfils.filter(p => p.consentement).length;
+
+  // Rétention approximative : parmi les profils créés il y a 8 semaines ou
+  // plus, quelle proportion a validé au moins une journée de sa routine.
+  const seuil56j = Date.now() - 56 * 86400000;
+  const eligiblesRetention = listeProfils.filter(p => Date.parse(p.cree_le) <= seuil56j);
+  const retenus = eligiblesRetention.filter(p => profilsEngages.has(p.id));
+
+  // Dernier diagnostic de chaque profil (les lignes arrivent déjà triées
+  // cree_le desc, donc le premier rencontré par profil est le plus récent).
+  const dernierParProfil = new Map();
+  listeDiagnostics.forEach(d => {
+    if (!dernierParProfil.has(d.profil_id)) dernierParProfil.set(d.profil_id, d);
+  });
+  const derniers = [...dernierParProfil.values()];
+
+  const compter = (valeurs) => {
+    const c = {};
+    valeurs.forEach(v => { const k = v || "Non renseigné"; c[k] = (c[k] || 0) + 1; });
+    return Object.entries(c).sort((a, b) => b[1] - a[1]);
+  };
+  const LABEL_BUDGET = { "1": "Essentiel", "2": "Équilibre", "3": "Premium" };
+  const typesPeau = compter(derniers.map(d => d.profil_peau));
+  const budgets = compter(derniers.map(d => LABEL_BUDGET[(d.reponses || {}).budget] || null));
+
+  // Profils créés / diagnostics enregistrés par semaine, 8 dernières semaines.
+  const semaines = [];
+  const debutCourant = debutDeSemaineUTC(Date.now());
+  for (let i = 7; i >= 0; i--) semaines.push(debutCourant - i * 7 * 86400000);
+  const parSemaine = (dates) => semaines.map(debut => {
+    const fin = debut + 7 * 86400000;
+    return dates.filter(d => d >= debut && d < fin).length;
+  });
+
+  return {
+    genereLe: new Date().toISOString(),
+    totalProfils,
+    totalDiagnostics: listeDiagnostics.length,
+    tauxSuiviActif: totalProfils ? Math.round((suiviActifs / totalProfils) * 100) : 0,
+    eligiblesRetention: eligiblesRetention.length,
+    tauxRetention56j: eligiblesRetention.length
+      ? Math.round((retenus.length / eligiblesRetention.length) * 100)
+      : null,
+    semaines: semaines.map(s => new Date(s).toISOString().slice(0, 10)),
+    profilsParSemaine: parSemaine(listeProfils.map(p => Date.parse(p.cree_le))),
+    diagnosticsParSemaine: parSemaine(listeDiagnostics.map(d => Date.parse(d.cree_le))),
+    typesPeau,
+    budgets,
+    plafondAtteint: totalProfils >= PLAFOND_LIGNES || listeDiagnostics.length >= PLAFOND_LIGNES
+  };
+}
+
 export default async function handler(req, res) {
   res.setHeader("Cache-Control", "no-store");
 
@@ -324,6 +409,13 @@ export default async function handler(req, res) {
       const profils = await sb("profils?token=eq." + token + "&select=id,email,prenom");
       if (!profils || !profils.length) return res.status(404).json({ erreur: "Profil introuvable" });
       const p = profils[0];
+
+      if (req.query && req.query.admin) {
+        if ((p.email || "").toLowerCase() !== ADMIN_EMAIL) {
+          return res.status(403).json({ erreur: "Accès refusé" });
+        }
+        return res.status(200).json(await statistiquesServeur());
+      }
 
       const diags = await sb(
         "diagnostics?profil_id=eq." + p.id +
