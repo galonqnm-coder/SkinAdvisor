@@ -2,7 +2,7 @@
    Rend le site consultable hors ligne : la routine reste lisible dans une salle de bain sans réseau.
    Déposez ce fichier à la racine, à côté de skinadvisor-site.html renommé index.html. */
 
-const CACHE = "skinadvisor-v1";
+const CACHE = "skinadvisor-v2"; // v2 : purge tout cache v1 pouvant contenir une réponse /api/ (sécurité, 2 sept.)
 const FICHIERS = ["./", "./index.html", "./manifest.webmanifest"];
 
 self.addEventListener("install", e => {
@@ -20,6 +20,11 @@ self.addEventListener("activate", e => {
 self.addEventListener("fetch", e => {
   const req = e.request;
   if (req.method !== "GET") return;
+
+  // Les réponses de l'API (profil, e-mail, réponses, agrégats admin) ne doivent
+  // JAMAIS être mises en cache : elles resteraient lisibles dans le stockage du
+  // navigateur, y compris sur un ordinateur partagé. On laisse passer au réseau.
+  if (req.url.includes("/api/")) return;
 
   // Les polices Google : on sert le cache d'abord, on rafraîchit en arrière-plan.
   if (req.url.includes("fonts.googleapis.com") || req.url.includes("fonts.gstatic.com")){
