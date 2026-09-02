@@ -43,7 +43,9 @@ const CLE_SERVICE =
 
 const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || "nathandebont@gmail.com").trim().toLowerCase();
 
-const EMAIL_OK = /^[^@\s]+@[^@\s]+\.[^@\s]{2,}$/;
+// Exclut explicitement < > " ' ` , ; ( ) : un e-mail valide n'en contient jamais,
+// et cela garantit qu'aucun caractère porteur de HTML ne peut entrer par ce champ.
+const EMAIL_OK = /^[^\s<>"'`,;()@]+@[^\s<>"'`,;()@]+\.[^\s<>"'`,;()@]{2,}$/;
 const UUID_OK = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const texte = (v, max) => (typeof v === "string" ? v.trim().slice(0, max) : "");
@@ -261,7 +263,12 @@ async function statistiquesServeur() {
     return Object.entries(c).sort((a, b) => b[1] - a[1]);
   };
   const LABEL_BUDGET = { "1": "Essentiel", "2": "Équilibre", "3": "Premium" };
-  const typesPeau = compter(derniers.map(d => d.profil_peau));
+  // Seuls des libellés connus sortent d'ici : jamais le texte brut d'un visiteur.
+  // Le tableau de bord est affiché dans le navigateur de l'admin ; une valeur
+  // libre (profil_peau, concern) qui contiendrait du HTML s'y exécuterait sinon.
+  // Défense côté serveur en plus de l'échappement côté client.
+  const LABEL_TYPE = { grasse: "Grasse", mixte: "Mixte", normale: "Normale", seche: "Sèche" };
+  const typesPeau = compter(derniers.map(d => LABEL_TYPE[d.profil_peau] || null));
   const budgets = compter(derniers.map(d => LABEL_BUDGET[(d.reponses || {}).budget] || null));
 
   // Préoccupations déclarées (jusqu'à 3 par personne, question à choix multiple) :
@@ -272,7 +279,8 @@ async function statistiquesServeur() {
     deshydratation: "Tiraillements, déshydratation", terne: "Teint terne, fatigué", cernes: "Cernes, poches"
   };
   const toutesPreoccupations = [];
-  derniers.forEach(d => (((d.reponses || {}).concerns) || []).forEach(c => toutesPreoccupations.push(LABEL_CONCERNS[c] || c)));
+  // Une valeur inconnue est comptée sous « Autre » plutôt que réémise telle quelle.
+  derniers.forEach(d => (((d.reponses || {}).concerns) || []).forEach(c => toutesPreoccupations.push(LABEL_CONCERNS[c] || "Autre")));
   const preoccupations = compter(toutesPreoccupations);
 
   // Profil démographique déclaré (âge et sexe), même méthode que types de peau/budgets :
@@ -364,12 +372,15 @@ export default async function handler(req, res) {
       // On répond comme si tout allait bien, sans rien écrire nulle part.
       if (texte(c.web, 200)) {
         return token ? res.status(204).end()
-                     : res.status(201).json({ token: crypto.randomUUID() });
+                     : res.status(201).json({ token: (globalThis.crypto && crypto.randomUUID)
+                         ? crypto.randomUUID()
+                         : "00000000-0000-4000-8000-000000000000" });
       }
 
-      // Garde-fou sur la taille des réponses : personne n'a un questionnaire de 20 Ko.
-      if (JSON.stringify(reponses).length > 20000) {
-        return res.status(400).json({ erreur: "Réponses trop volumineuses" });
+      // Garde-fou sur la taille : personne n'a un questionnaire ni un jeu de
+      // scores de 20 Ko. Borne les deux pour éviter qu'on gonfle la base.
+      if (JSON.stringify(reponses).length > 20000 || JSON.stringify(scores).length > 20000) {
+        return res.status(400).json({ erreur: "Données trop volumineuses" });
       }
 
       // --- Profil déjà connu de cet appareil
