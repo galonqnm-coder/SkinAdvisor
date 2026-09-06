@@ -4,8 +4,8 @@
   "description": "Diagnostic de peau, routine personnalisée et suivi sur huit semaines.",
   "start_url": "./",
   "display": "standalone",
-  "background_color": "#E8E0CD",
-  "theme_color": "#E8E0CD",
+  "background_color": "#FFFFFF",
+  "theme_color": "#3F7A5E",
   "lang": "fr",
   "icons": [
     { "src": "icone-192.png", "sizes": "192x192", "type": "image/png" },

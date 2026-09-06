@@ -1,8 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-  <url>
-    <loc>https://skin-advisor-two.vercel.app/</loc>
-    <lastmod>2026-08-30</lastmod>
-    <changefreq>weekly</changefreq>
-  </url>
+  <url><loc>https://skin-advisor-two.vercel.app/</loc><lastmod>2026-09-05</lastmod><changefreq>weekly</changefreq><priority>1.0</priority></url>
+  <url><loc>https://skin-advisor-two.vercel.app/guides/</loc><lastmod>2026-09-05</lastmod><changefreq>weekly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://skin-advisor-two.vercel.app/guides/routine-peau-mixte-30-euros</loc><lastmod>2026-09-05</lastmod><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://skin-advisor-two.vercel.app/guides/niacinamide-ou-acide-azelaique</loc><lastmod>2026-09-05</lastmod><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://skin-advisor-two.vercel.app/guides/spf-tous-les-jours-faut-il-vraiment</loc><lastmod>2026-09-05</lastmod><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://skin-advisor-two.vercel.app/guides/sommeil-stress-peau-niveau-de-preuve</loc><lastmod>2026-09-05</lastmod><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://skin-advisor-two.vercel.app/guides/alimentation-boutons-sucre-lait-chocolat</loc><lastmod>2026-09-05</lastmod><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://skin-advisor-two.vercel.app/guides/retinol-debuter-sans-irritation</loc><lastmod>2026-09-05</lastmod><changefreq>monthly</changefreq><priority>0.8</priority></url>
 </urlset>
