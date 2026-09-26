@@ -23,6 +23,9 @@
  *   BREVO_EXPEDITEUR             adresse d'expéditeur validée dans Brevo
  *   BREVO_LIST_ID                facultatif (liste contacts)
  *   SITE_URL                     facultatif (défaut : https://skin-advisor-two.vercel.app)
+ *   ADMIN_TOKEN                  facultatif — jeton du profil admin ; une fois posé, le
+ *                                tableau de bord exige ce jeton et l'adresse admin ne
+ *                                peut plus servir à créer un profil (anti-usurpation)
  *   ADMIN_EMAIL                  facultatif (défaut : nathandebont@gmail.com) — seul ce
  *                                compte peut ouvrir le tableau de bord serveur
  *
@@ -42,6 +45,15 @@ const CLE_SERVICE =
   process.env.SUPABASE_SECRET_KEY || "";
 
 const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || "nathandebont@gmail.com").trim().toLowerCase();
+/* Jeton du profil administrateur (colonne `token` de sa ligne dans `profils`).
+   Facultatif, mais fortement conseillé une fois le profil admin créé : tant
+   qu'il n'est pas renseigné, la première personne qui active un suivi avec
+   l'adresse ADMIN_EMAIL obtient le jeton — donc le tableau de bord. Avec
+   ADMIN_TOKEN : le tableau de bord exige CE jeton, et aucun profil ne peut
+   plus être créé avec l'adresse admin (réponse neutre 409). */
+const ADMIN_TOKEN = (process.env.ADMIN_TOKEN || "").trim();
+const estJetonAdmin = (p, token) =>
+  (p.email || "").toLowerCase() === ADMIN_EMAIL && (!ADMIN_TOKEN || token === ADMIN_TOKEN);
 
 // Exclut explicitement < > " ' ` , ; ( ) : un e-mail valide n'en contient jamais,
 // et cela garantit qu'aucun caractère porteur de HTML ne peut entrer par ce champ.
@@ -406,7 +418,7 @@ export default async function handler(req, res) {
       }
 
       const dejaLa = await sb("profils?email=eq." + encodeURIComponent(email) + "&select=id");
-      if (dejaLa && dejaLa.length) {
+      if ((dejaLa && dejaLa.length) || (ADMIN_TOKEN && email === ADMIN_EMAIL)) {
         // On ne renvoie surtout PAS le jeton du profil existant : il suffirait
         // de taper l'adresse de quelqu'un pour accéder à son suivi.
         return res.status(409).json({ existe: true });
@@ -443,7 +455,7 @@ export default async function handler(req, res) {
       const p = profils[0];
 
       if (req.query && req.query.admin) {
-        if ((p.email || "").toLowerCase() !== ADMIN_EMAIL) {
+        if (!estJetonAdmin(p, token)) {
           return res.status(403).json({ erreur: "Accès refusé" });
         }
         return res.status(200).json(await statistiquesServeur());
